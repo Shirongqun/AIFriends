@@ -15,7 +15,7 @@ export default defineConfig({
   ],
   build: {
     outDir: path.resolve(__dirname, '../backend/static/frontend'), // 打包到 Django static
-    emptyOutDir: true,
+    emptyOutDir: true, // 构建前清空目录
   },
   resolve: {
     alias: {
