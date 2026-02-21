@@ -4,7 +4,7 @@ import CameraIcon from "@/views/user/profile/components/icons/CameraIcon.vue";
 import Croppie from 'croppie'
 import 'croppie/croppie.css'
 
-const props = defineProps('photo')
+const props = defineProps(['photo'])
 const myPhoto = ref(props.photo)
 
 watch(() => props.photo, (newVal) => {
