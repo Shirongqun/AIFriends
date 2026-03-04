@@ -1,5 +1,5 @@
 <script setup>
-import {onBeforeUnmount, ref, useTemplateRef, watch} from "vue";
+import {nextTick, onBeforeUnmount, ref, useTemplateRef, watch} from "vue";
 import CameraIcon from "@/views/user/profile/components/icons/CameraIcon.vue";
 import Croppie from "croppie";
 
@@ -17,6 +17,7 @@ let croppie = null
 
 async function openModal(photo) {
   modalRef.value.showModal()
+  await nextTick() // 等待页面渲染完，然后下边绑定图片
   if (!croppie) {
     croppie = new Croppie(croppieRef.value, {  // 创建croppie对象
       viewport: {width: 300, height: 500},
