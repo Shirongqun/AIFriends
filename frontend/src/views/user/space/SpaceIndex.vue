@@ -1,7 +1,7 @@
 <script setup>
 
 import UserInfoField from "@/views/user/space/components/UserInfoField.vue";
-import {nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef} from "vue";
+import {nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch} from "vue";
 import api from "@/js/http/api.js";
 import {useRoute} from "vue-router";
 import Character from "@/components/character/Character.vue";
@@ -12,6 +12,18 @@ const isLoading = ref(false) // 当前是否正在加载
 const hasCharacters = ref(true) // 云端是否还有角色
 const sentinelRef = useTemplateRef('sentinel-ref')
 const route = useRoute()
+
+function reset() {
+  userProfile.value = null
+  characters.value = []
+  isLoading.value = false
+  hasCharacters.value = true
+  loadMore()
+}
+// 监听路由里的user_id是否发生了变化
+watch(() => route.params.user_id, () => {
+  reset()
+})
 
 function checkSentinelVisible() {  // 判断哨兵是否能被看到
   if (!sentinelRef.value) return false
