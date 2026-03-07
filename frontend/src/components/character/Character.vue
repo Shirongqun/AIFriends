@@ -7,7 +7,7 @@ import api from "@/js/http/api.js";
 import ChatField from "@/components/character/chat_field/ChatField.vue";
 import {useRouter} from "vue-router";
 
-const props = defineProps(['character', 'canEdit'])  // 接收传过来的信息
+const props = defineProps(['character', 'canEdit', 'canRemoveFriend', 'friendId'])  // 接收传过来的信息
 const emit = defineEmits(['remove'])  // 父组件传过来的事件
 const isHover = ref(false)  // 鼠标是否悬浮
 const user = useUserStore()  // 获取user信息
@@ -19,7 +19,20 @@ async function handleRemoveCharacter() {
       character_id: props.character.id
     })
     if (res.data.result === 'success') {
-      emit('remove', props.character.id)  // 触发父组件的remove函数
+      emit('remove', props.character.id)  // 触发父组件绑定的remove函数：removeCharacter
+    }
+  } catch (err) {
+  }
+}
+
+async function handleRemoveFriend() {
+  try {
+    const res = await api.post('/api/friend/remove/', {
+      friend_id: props.friendId,
+    })
+    const data = res.data
+    if (data.result === 'success') {
+      emit('remove', props.friendId)  // 触发父组件绑定的remove函数：removeFriend
     }
   } catch (err) {
   }
@@ -45,7 +58,6 @@ async function openChatField() {
         chatFieldRef.value.showModal()
       }
     } catch (err) {
-      console.log(err)
     }
   }
 }
@@ -59,10 +71,17 @@ async function openChatField() {
         <div class="absolute left-0 top-50 w-60 h-50 bg-linear-to-t from-black/40 to-transparent"></div>
 
         <div v-if="canEdit && character.author.user_id === user.id" class="absolute right-0 top-50">
-          <RouterLink :to="{name: 'update-character', params: {character_id: character.id}}" class="btn btn-circle btn-ghost bg-transparent">
+          <RouterLink @click.stop :to="{name: 'update-character', params: {character_id: character.id}}" class="btn btn-circle btn-ghost bg-transparent">
             <UpdateIcon />
           </RouterLink>
-          <button @click="handleRemoveCharacter" class="btn btn-circle btn-ghost bg-transparent">
+          <button @click.stop="handleRemoveCharacter" class="btn btn-circle btn-ghost bg-transparent">
+            <RemoveIcon />
+          </button>
+        </div>
+
+<!--        删除按钮-->
+        <div v-if="canRemoveFriend" class="absolute right-0 top-50">
+          <button @click.stop="handleRemoveFriend" class="btn btn-circle btn-ghost bg-transparent">
             <RemoveIcon />
           </button>
         </div>
