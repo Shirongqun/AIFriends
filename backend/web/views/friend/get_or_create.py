@@ -19,7 +19,7 @@ class GetOrCreateFriendView(APIView):
             if friends.exists():
                 friend = friends.first()
             else:
-                friend = Friend(character_id=character_id, me=user_profile)
+                friend = Friend.objects.create(character_id=character_id, me=user_profile)
             character = friend.character
             author = character.author
             return Response({
