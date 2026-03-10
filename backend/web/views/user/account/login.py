@@ -40,8 +40,6 @@ class LoginView(APIView):
                 'result': '用户名或密码错误'
             })
         except:
-            import traceback
-            print(traceback.format_exc())
             return Response({
                 'result': '系统异常，请稍后重试'
             })
