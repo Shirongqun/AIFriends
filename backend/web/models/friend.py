@@ -18,11 +18,11 @@ class Friend(models.Model):
 # 每轮对话
 class Message(models.Model):
     friend = models.ForeignKey(Friend, on_delete=models.CASCADE)
-    user_message = models.TextField(max_length=5000)  # 用户的消息
-    input = models.TextField(max_length=5000)         # 给大模型的输入
-    output = models.TextField(max_length=5000)        # 大模型的回复
-    input_tokens = models.IntegerField(default=0)     # 输入的token数量
-    output_tokens = models.IntegerField(default=0)    # 输出的token数量
+    user_message = models.TextField(max_length=500)  # 用户的消息
+    input = models.TextField(max_length=10000)       # 给大模型的输入
+    output = models.TextField(max_length=500)        # 大模型的回复
+    input_tokens = models.IntegerField(default=0)    # 输入的token数量
+    output_tokens = models.IntegerField(default=0)   # 输出的token数量
     total_tokens = models.IntegerField(default=0)
     create_time = models.DateTimeField(default=now)
 
