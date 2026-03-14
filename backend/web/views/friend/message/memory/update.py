@@ -1,5 +1,4 @@
 # 调用更新记忆的计算流程图
-from pprint import pprint
 
 from django.utils.timezone import now
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -33,12 +32,8 @@ def update_memory(friend):
             create_human_message(friend)
         ]
     }
-    print("inputs")
-    pprint(inputs)
     res = app.invoke(inputs)
     friend.memory = res['messages'][-1].content
-    print("friend.memory")
-    pprint(friend.memory)
 
     friend.update_time = now()
     friend.save()
