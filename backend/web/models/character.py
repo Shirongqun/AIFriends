@@ -15,10 +15,23 @@ def background_image_upload_to(instance, filename):
     filename = f'{uuid.uuid4().hex[:10]}.{ext}'
     return f'character/background_images/{instance.author.user_id}_{filename}'
 
+
+class Voice(models.Model):
+    name = models.CharField(max_length=100) # 显示给用户
+    voice_id = models.CharField(max_length=100) # 阿里云文档里的一个变量
+    create_time = models.DateTimeField(default=now)
+
+    # 定义数据库管理员页面的展示格式
+    def __str__(self):
+        return f"{self.name} - {self.voice_id} - {localtime(self.create_time).strftime('%Y-%m-%d %H:%M:%S')}"
+
+
 class Character(models.Model):
     author = models.ForeignKey(UserProfile, on_delete=models.CASCADE) # 创建角色的作者
     name = models.CharField(max_length=50)
     photo = models.ImageField(upload_to=photo_upload_to)
+    # 音色属性
+    voice = models.ForeignKey(Voice, default=None, on_delete=models.CASCADE, blank=True, null=True)
     profile = models.TextField(max_length=100000)
     background_image = models.ImageField(upload_to=background_image_upload_to)
     create_time = models.DateTimeField(default=now)

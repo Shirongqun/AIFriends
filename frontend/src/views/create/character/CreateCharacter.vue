@@ -4,25 +4,45 @@ import Photo from "@/views/create/character/components/Photo.vue";
 import Name from "@/views/create/character/components/Name.vue";
 import Profile from "@/views/create/character/components/Profile.vue";
 import BackgroundImage from "@/views/create/character/components/BackgroundImage.vue";
-import {ref, useTemplateRef} from "vue";
+import {onMounted, ref, useTemplateRef} from "vue";
 import {base64ToFile} from "@/js/utils/base64_to_file.js";
 import api from "@/js/http/api.js";
 import {useRouter} from "vue-router";
 import {useUserStore} from "@/stores/user.js";
+import Voice from "@/views/create/character/components/Voice.vue";
 
 const user = useUserStore()
 const router = useRouter()
 
 const photoRef = useTemplateRef('photo-ref')
 const nameRef = useTemplateRef('name-ref')
+const voiceRef = useTemplateRef('voice-ref')
 const profileRef = useTemplateRef('profile-ref')
 const backgroundImageRef = useTemplateRef('background-image-ref')
 const errorMessage = ref('')
+
+const voices = ref([])
+const curVoiceId = ref(null) // 此id为数据库默认包含的id，非阿里云那个voice_id
+
+// 组件刚挂载的时候从云端加载音色列表
+onMounted(async () => {
+  try {
+    const res = await api.get('/api/create/character/voice/get_list/', {})
+    const data = res.data
+    if (data.result === 'success') {
+      voices.value = data.voices
+      curVoiceId.value = data.voices[0].id  // 用户还没选择，默认第一个
+    }
+  } catch (err) {
+    console.error(err)
+  }
+})
 
 // 定义对接后端的函数
 async function handleCreate() {
   const photo = photoRef.value.myPhoto
   const name = nameRef.value.myName?.trim()
+  const voice = voiceRef.value.myVoice
   const profile = profileRef.value.myProfile?.trim()
   const backgroundImage = backgroundImageRef.value.myBackgroundImage
 
@@ -31,6 +51,8 @@ async function handleCreate() {
     errorMessage.value = '头像不能为空'
   } else if (!name) {
     errorMessage.value = '名字不能为空'
+  } else if (!voice) {
+    errorMessage.value = '音色不能为空'
   } else if (!profile) {
     errorMessage.value = '角色介绍不能为空'
   } else if (!backgroundImage) {
@@ -38,6 +60,7 @@ async function handleCreate() {
   } else {
     const formData = new FormData  // 自定义form表单数据
     formData.append('name', name)
+    formData.append('voice_id', voice) // 这里为啥是voice_id？
     formData.append('profile', profile)
     formData.append('photo', base64ToFile(photo, 'photo.png'))  // 使用自己实现的辅助函数
     formData.append('background_image', base64ToFile(backgroundImage, 'background_image.png'))
@@ -69,6 +92,7 @@ async function handleCreate() {
         <h3 class="text-lg font-bold my-4">创建角色</h3>
         <Photo ref="photo-ref" />
         <Name ref="name-ref" />
+        <Voice ref="voice-ref" :voices="voices" :curVoiceId="curVoiceId" />
         <Profile ref="profile-ref" />
         <BackgroundImage ref="background-image-ref" />
 
