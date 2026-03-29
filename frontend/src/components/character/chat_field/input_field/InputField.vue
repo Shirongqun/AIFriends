@@ -103,7 +103,8 @@ function focus() {
   inputRef.value.focus()
 }
 
-// 点击发送按钮后调用
+// 1、绑定到表单、发送按钮，提交表单或者点击发送按钮后被调用
+// 2、绑定到了Microphone.vue，子组件里调用后端语音合成成功之后也会被调用
 async function handleSend(event, audio_msg) {
   // 取出内容
   let content

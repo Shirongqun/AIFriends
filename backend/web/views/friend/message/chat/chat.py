@@ -52,13 +52,14 @@ class MessageChatView(APIView):
     permission_classes = [IsAuthenticated]
     renderer_classes = [SSERenderer]  # 引入渲染器
     def post(self, request):
-        friend_id = request.data['friend_id']
-        message = request.data['message'].strip()
+        """处理前端传入"""
+        friend_id = request.data['friend_id']     # 数据库自带的id，可唯一确定与虚拟角色的好友关系
+        message = request.data['message'].strip() # 用户发送的消息
         if not message:
             return Response({
                 'result': '消息不能为空',
             })
-        friends = Friend.objects.filter(pk=friend_id, me__user=request.user) # pk 跟 id 一样
+        friends = Friend.objects.filter(id=friend_id, me__user=request.user) # pk 跟 id 一样
         if not friends.exists():
             return Response({
                 'result': '好友不存在',
@@ -80,7 +81,13 @@ class MessageChatView(APIView):
         response['X-Accel-Buffering'] = 'no' # 不让Nginx缓存流式信息
         return response
 
+    # app: 文本生成的Graph
+    # inputs: 要发给文本大模型的输入
+    # mq: 存放语音合成结果
+    # ws: 建立与阿里云 DashScope 的实时推理接口
+    # task_id:
     async def tts_sender(self, app, inputs, mq, ws, task_id):
+        """利用文本大模型生成要回复的文字，并将其传给语音大模型"""
         async for msg, metadata in app.astream(inputs, stream_mode="messages"):
             if isinstance(msg, BaseMessageChunk):
                 if msg.content:
@@ -143,7 +150,7 @@ class MessageChatView(APIView):
                 },
                 "payload": {
                     "task_group": "audio",
-                    "task": "tts",
+                    "task": "tts", # 语音合成
                     "function": "SpeechSynthesizer",
                     "model": "cosyvoice-v3-flash",
                     "parameters": {
@@ -180,7 +187,7 @@ class MessageChatView(APIView):
         thread.start()
 
         full_output = '' # 大模型的回复
-        full_usage = {}
+        full_usage = {}  # 消耗量
         while True:
             msg = mq.get()
             if not msg:

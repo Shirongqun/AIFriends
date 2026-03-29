@@ -340,7 +340,9 @@ flex-col items-center一起作用，使得组件被设置为水平居中；
 
 实现好友页面
 
-**创建backend/web/models/friend.py数据库对象**，存储每个用户和每一个虚拟角色的好友关系
+**创建backend/web/models/friend.py数据库对象**，class Friend，存储每个用户和每一个虚拟角色的好友关系
+
+
 
 **CASCADE** 意思是"级联删除"：
 
@@ -384,11 +386,9 @@ backend/web/urls.py
 
 # 5.1 文字聊天（上）
 
-开始对接大模型了！！！
+对接大模型，其实就是**用框架给大模型发一个http请求**。
 
-其实就是给大模型发一个http请求，只不过是用框架来写的。
-
-注册阿里云账号
+借助`langgraph`对接大模型
 
 遇到了python软件包版本不一致的问题。
 
@@ -396,9 +396,166 @@ backend/web/urls.py
 pip install --upgrade langchain langchain-core langchain-community
 ```
 
-实现打开聊天窗口自动聚焦的功能
+敏感信息保存在环境变量中，安装python-dotenv：pip install python-dotenv，负责加载环境变量
+
+与大模型聊天是回合制，将每一轮对话存下来，在backend/web/models/friend.py定义`class Message`。
+
+记得migrate
+
+```
+python ./manage.py makemigrations
+python ./manage.py migrate
+```
+
+每一轮对话中，用户发送的消息保存在user_message中，但是实际上发送给大模型的信息会加上提示词、最近的对话等等很多信息，所以将给大模型的输入保存到input变量，方便调试。
+
+输入输出token的价格不一样，一般输出会贵一些。
+
+注册阿里云账号，获得api-key、发送请求的url。
+
+在`AIFriends/backend/backend/settings.py`开头添加：
+
+```python
+from dotenv import load_dotenv
+
+load_dotenv()
+```
+
+然后重启Django服务，这样django就能自动将.env里的环境变量加载到内存中。
+
+
+
+## 实现chat.py
+
+实现AIFriends/backend/web/views/friend/message/chat/chat.py，接收前端发送来的聊天消息
+
+friend_id可以唯一地确定用户与某个虚拟角色之间的好友关系
+
+xxx.strip()可以删除前后空格、回车
+
+### 使用langgraph对接大模型
+
+封装ChatGraph代码，
+
+langgraph就是用一个图定义所有的计算关系，
+
+在langgraph中需要维护一个数据，称为状态，维护图计算的状态
+
+**class AgentState**看着复杂，本质上就是一个字典，只不过类型更加严格一些。
+
+TypedDict说明是一个字典，字典里有一个messages，对应的是一个列表，
+
+add_messages说明其合并方式：传入[a, b, c]，大模型输出为[x]，自动合并为[a, b, c, x]，一般传给大模型的就是一个消息列表，大模型的回复自动追加到消息列表尾部，这是一个很常见的操作；
+
+
+
+```
+        class AgentState(TypedDict):
+            messages: Annotated[Sequence[BaseMessage], add_messages]
+
+        {
+            'messages': []
+        }
+```
+
+**定义agent的逻辑**，就是对大模型的调用：model_call，名字自定义
+
+**定义状态图**，图里维护的消息类型是AgentState
+
+```python
+graph = StateGraph(AgentState)
+```
+
+给状态图添加一个自定义节点agent，节点的函数是model_call
+
+```python
+graph.add_node('agent', model_call)
+```
+
+添加2条边
+
+```
+graph.add_edge(START, 'agent')
+graph.add_edge('agent', 'END')
+```
+
+将传入的用户消息封装成HumanMessage
+
+```python
+        inputs = {
+            'messages': [HumanMessage(message)],
+        }
+```
+
+**实现打开聊天窗口自动聚焦到聊天信息窗口的功能**
+
+要求打开模态框的时候自动聚焦到输入聊天信息的地方。需要在父组件中调用子组件，因此，把组件的接口暴露出去
+
+```vue
+// 将接口暴漏给父组件
+defineExpose({
+  focus,
+  close,
+})
+```
+
+### 在InputField.vue中对接后端的api
+
+实现async function handleSend(event, audio_msg) 
+
+点击发送按钮可以触发提交，因此添加@click="handleSend"
+
+回车也可以触发提交、切不能刷新，因此将输入框修改为表单<form @submit.prevent="handleSend"/>，监听表单的提交事件，并阻止默认行为，然后执行 handleSend 方法
+
+使用v-model="message"可以把这个**输入框的值**和脚本里的 `message` 变量**绑定在一起**
+
+### 实现流式回复
+
+前端发送消息时不需要流式，后端回消息时需要流水，因此使用SSE（Server-Sent Events）
+
+SSE 只是 HTTP 响应的一种特殊格式，它仍然使用 HTTP/HTTPS 协议。
+
+
+
+定义生成器函数event_stream，内部使用`yield`生成数据
+
+将大模型输出修改为流水输出：`streaming=True,`
+
+app.invoke是非流水输出，app.stream是流式输出，app.astream是异步流式输出。
+
+判断返回的消息是否为BaseMessageChunk类型
+
+```python
+if isinstance(msg, BaseMessageChunk):
+```
+
+判断是否有属性
+
+```
+if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
+```
+
+遍历生成器里的内容
+
+```python
+for date in event_stream(): # 会自动用next遍历生成器里的内容
+```
+
+必须使用 yield f'data: [DONE]\n\n'这种格式，是SSE定义的。
+
+#### 改造前端请求
+
+新建frontend/src/js/http/streamApi.js，流式接收数据
+
+为了防止用户重复发消息，定义了isProcessing变量。后边咋又删除了呢。
+
+55:30
+
+
 
 full_usage是干啥的？
+
+当把yield f'data: [DONE]\n\n'返回后，怎么还会执行到下边的逻辑呢？
 
 前端向后端传消息id，后端知道回传哪些消息
 
@@ -426,7 +583,7 @@ print(traceback.format_exc())
 
 
 
-15:02
+
 
 流程图是什么？
 
@@ -440,7 +597,7 @@ class Message保存每一轮对话的内容。
 
 长期记忆和短期记忆什么区别？
 
-
+每次在组织传给llm的消息`inputs`时，采用系统提示词（SystemPrompt）+角色性格（friend.character.profile）+长期记忆（friend.memory）+最近十轮对话（Message）+用户消息（request.data['message']）的格式
 
 langchain_openai这个python软件包是在什么章节install的？
 

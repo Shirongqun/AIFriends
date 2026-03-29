@@ -13,7 +13,7 @@ from langgraph.prebuilt import ToolNode
 
 from web.documents.utils.custom_embeddings import CustomEmbeddings
 
-
+# 聊天状态图
 class ChatGraph:
     @staticmethod
     def create_app():
@@ -43,8 +43,8 @@ class ChatGraph:
 
         llm = ChatOpenAI(
             model='deepseek-v3.2',
-            openai_api_key=os.getenv('API_KEY'),
-            openai_api_base=os.getenv('API_BASE'),
+            api_key=os.getenv('API_KEY'),   # 或者是 openai_api_key=
+            base_url=os.getenv('API_BASE'), # 或者是 openai_api_base=
             streaming=True,  # 流式输出
             model_kwargs={
                 "stream_options": {
@@ -58,7 +58,7 @@ class ChatGraph:
 
         def model_call(state: AgentState) -> AgentState:
             res = llm.invoke(state['messages'])
-            return {'messages': [res]}
+            return {'messages': [res]}  # 可以把res直接追加到输入的消息列表末尾
 
         def should_continue(state: AgentState) -> str:
             last_message = state['messages'][-1]
