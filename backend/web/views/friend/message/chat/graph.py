@@ -19,7 +19,7 @@ class ChatGraph:
     def create_app():
         @tool
         def get_time() -> str:
-            """当需要查询精确时间时，调用此函数，返回格式为：[年-月-日 时:分:秒]"""
+            """当需要查询精确时间时，调用此函数。返回格式为：[年-月-日 时:分:秒]"""
             return localtime(now()).strftime('%Y-%m-%d %H:%M:%S')
 
         @tool
@@ -62,7 +62,7 @@ class ChatGraph:
 
         def should_continue(state: AgentState) -> str:
             last_message = state['messages'][-1]
-            if last_message.tool_calls:
+            if last_message.tool_calls: # lang_graph自定义的
                 return "tools"
             return "end"
 

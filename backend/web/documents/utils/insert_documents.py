@@ -15,8 +15,11 @@ def insert_documents():
     texts = text_splitter.split_documents(documents)
     print(f"已切分成 {len(texts)} 个片段。")
 
+    # 创建向量化实例：创建 Embedding 对象
     embeddings = CustomEmbeddings()
+    # 连接向量数据库：连接到 LanceDB 数据库
     db = lancedb.connect('./web/documents/lancedb_storage')
+    # 创建向量表：将文档片段向量化并存储到数据库
     vector_db = LanceDB.from_documents(
         documents=texts,
         embedding=embeddings,

@@ -130,6 +130,7 @@ async function handleSend(event, audio_msg) {
         friend_id: props.friendId,
         message: content
       },
+      // isDone: 自定义的标识数据是否已经发送结束
       onmessage(data, isDone) {
         if (curId !== processId) return
 

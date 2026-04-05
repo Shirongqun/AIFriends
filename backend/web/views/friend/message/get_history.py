@@ -12,6 +12,7 @@ class GetHistoryView(APIView):
         try:
             last_message_id = int(request.query_params.get('last_message_id'))
             friend_id = request.query_params.get('friend_id')
+            # Django 自动为所有 ForeignKey 创建 字段名_id 字段
             queryset = Message.objects.filter(friend_id=friend_id, friend__me__user=request.user)
             if last_message_id > 0:
                 queryset = queryset.filter(pk__lt=last_message_id)

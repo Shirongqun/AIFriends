@@ -15,7 +15,7 @@ const user = useUserStore()
           <img :src="character.photo" alt="">
         </div>
       </div>
-<!--      聊天泡泡-->
+<!--      ai聊天泡泡-->
       <div class="chat-bubble whitespace-pre-wrap break-all">{{ message.content }}</div>
     </div>
 <!--    用户发言-->
@@ -25,7 +25,7 @@ const user = useUserStore()
           <img :src="user.photo" alt="">
         </div>
       </div>
-<!--      聊天泡泡-->
+<!--      用户聊天泡泡-->
       <div class="chat-bubble chat-bubble-success whitespace-pre-wrap">{{ message.content }}</div>
     </div>
   </div>

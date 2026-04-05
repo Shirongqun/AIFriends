@@ -70,8 +70,8 @@ class MessageChatView(APIView):
         inputs = {
             'messages': [HumanMessage(message)],
         }
-        inputs = add_system_prompt(inputs, friend)
-        inputs = add_recent_messages(inputs, friend)
+        inputs = add_system_prompt(inputs, friend)   # 手动添加系统提示词
+        inputs = add_recent_messages(inputs, friend) # 手动添加最近10轮对话
 
         response = StreamingHttpResponse(
             self.event_stream(app, inputs, friend, message),
@@ -201,7 +201,7 @@ class MessageChatView(APIView):
             if msg.get('usage', None):
                 full_usage = msg['usage']
 
-        yield f'data: [DONE]\n\n'
+        yield f'data: [DONE]\n\n' # 读取完数据后才会执行下边的记录动作
         input_tokens = full_usage.get('input_tokens', 0)
         output_tokens = full_usage.get('output_tokens', 0)
         total_tokens = full_usage.get('total_tokens', 0)
@@ -218,5 +218,5 @@ class MessageChatView(APIView):
             total_tokens=total_tokens,
         )
         # 每间隔10条对话就保存一次记忆
-        if Message.objects.filter(friend=friend).count() % 1 == 0:
+        if Message.objects.filter(friend=friend).count() % 10 == 0:
             update_memory(friend)

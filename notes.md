@@ -429,6 +429,8 @@ load_dotenv()
 
 实现AIFriends/backend/web/views/friend/message/chat/chat.py，接收前端发送来的聊天消息
 
+backend/web/views/friend/message/chat/graph.py 聊天模块的计算流程图
+
 friend_id可以唯一地确定用户与某个虚拟角色之间的好友关系
 
 xxx.strip()可以删除前后空格、回车
@@ -449,13 +451,13 @@ add_messages说明其合并方式：传入[a, b, c]，大模型输出为[x]，�
 
 
 
-```
+```python
         class AgentState(TypedDict):
             messages: Annotated[Sequence[BaseMessage], add_messages]
 
-        {
-            'messages': []
-        }
+        // {
+        //     'messages': []
+        // }
 ```
 
 **定义agent的逻辑**，就是对大模型的调用：model_call，名字自定义
@@ -521,7 +523,7 @@ SSE 只是 HTTP 响应的一种特殊格式，它仍然使用 HTTP/HTTPS 协议�
 
 将大模型输出修改为流水输出：`streaming=True,`
 
-app.invoke是非流水输出，app.stream是流式输出，app.astream是异步流式输出。
+app.invoke是非流式输出，app.stream是流式输出，app.astream是异步流式输出。
 
 判断返回的消息是否为BaseMessageChunk类型
 
@@ -549,11 +551,7 @@ for date in event_stream(): # 会自动用next遍历生成器里的内容
 
 为了防止用户重复发消息，定义了isProcessing变量。后边咋又删除了呢。
 
-55:30
-
-
-
-full_usage是干啥的？
+full_usage是干啥的？表示消耗量，看着是msg中的固有属性
 
 当把yield f'data: [DONE]\n\n'返回后，怎么还会执行到下边的逻辑呢？
 
@@ -571,39 +569,224 @@ import traceback
 print(traceback.format_exc())
 ```
 
+## 实现消息持久化
+
+### 后端
+
+每次打开聊天界面，可以把历史聊天记录自动拉取下来。
+
+后端实现动态加载消息接口：get_history
+
+前端正在显示回复消息的时候，后端还没将消息写入到数据库中，因此不传items_count了，改为传msg_id，
+
+当前端初始加载、还没有消息的时候last_message_id传0；否则传最上边一条消息的id；后端从数据库查询小于该last_message_id的消息并返回；
+
+返回给前端用户消息、AI消息；
+
+### 前端
+
+整个ChatField.vue是聊天界面，把history聊天信息放这里，因为多个子组件会用到；
+
+在InputField.vue中点击发送时要将聊天信息放到history的最后；
+同时ChatHistory.vue也要显示history；
+
+将history传给这2个子组件，注意不要直接在子组件中修改父组件的内容，而是在父组件中定义一些函数，把这些函数传给子组件，子组件调用这些函数去修改父组件的变量；
+
+定义handlePushBackMessage、handleAddToLastMessage并传给InputField.vue;
+在InputField.vue中使用`const emit = defineEmits(['pushBackMessage', 'addToLastMessage'])`接收这两个事件；
+
+使用emit('', 'xx')即可调用父组件传过来的事件；
+
+每一条消息都是用的现成的daisyUI中的组件，左侧：class="chat chat-start"，右侧：class="chat chat-end"
+
+用户信息保存在全局变量**useUserStore**里；
+
+聊天泡泡要保留回车、空格，使用whitespace-pre-wrap属性
+
+**实现聊天记录自动滚动到下边**
+
+定义滚动区的引用：ref="scroll-ref"
+
+scroll height、client height是固有不变的，通过改变scroll top可以改变展示区域
+
+一般令scrollRef.value.scrollTop = scrollRef.value.scrollHeight即可
+
+<img src="D:\Courses\学习笔记\视窗默认显示最下边的消息.png" style="zoom:80%;" />
+
+由于是在每一次改表history消息的时候滚动，所以需要在handlePushBackMessage、handleAddToLastMessage中触发，因此将滚动的函数从ChatHistory.vue暴露给其父组件ChatField.vue
+
+**往上滚动鼠标时，实现流式加载消息**
+
+通过哨兵实现
+
+每次加载到消息后，需要修改视窗的scrollTop，这样才能保证聊天消息不会自动向上翻滚。
+
+判断哨兵是否在可视区域内：
+
+```
+  const sentinelRect = sentinelRef.value.getBoundingClientRect()
+  const scrollRect = scrollRef.value.getBoundingClientRect()
+```
+
+getBoundingClientRect()返回元素相对于浏览器视口（viewport）的位置和大小信息。
+
+与scrollRef标签是否有交集，如果有就从后端加载消息；
+
+一切都是相对于浏览器视口而言，
+
+注意无论我怎么滑动，scrollRect的位置、大小相对于浏览器视口是不变的；
+
+当我滑动、加载到更多<Message />时，sentinelRect的相对位置是会变化，可能就看不见了；
+
+所以才可以判断2个标签相对于浏览器视口的位置是否相交。
+
+<img src="D:\Courses\学习笔记\判断哨兵与聊天窗口是否相交.png" style="zoom:55%;" />
+
+为什么已经监听了哨兵的可见性还要加一个判断是否相交的逻辑呢？
+
+这是因为监听器只能在哨兵的可见性发生变化时触发，存在一种场景：监测到哨兵可见然后触发加载后端消息，但是加载过后没有填充满视窗口，此时哨兵仍然是可见的、监听器却不会触发（因为哨兵的状态没有改变），就需要判断哨兵与可视窗口是否存在交集才能触发再次从后端加载消息。
+
+
+
 
 
 # 5.2 文字聊天（下）
 
 `npm install`安装一下有安全隐患的包。
 
+## 添加系统提示词和短期记忆
 
+系统提示词：写情景规则
+
+扩展给大模型输入的信息
+
+一般给大模型的输入是一个列表 messages: [xx, xx, xx, ... ]
+
+消息是按照friend_id来绑定对话的
 
 <img src="D:\Courses\学习笔记\实现系统提示词.png" style="zoom:70%;" />
 
+创建数据库**SystemPrompt**存储提示词
+
+提示词类型有很多：回复、记忆，使用title区分；
+
+一种提示词可能有很多段，使用order_number分块，使用时将相同类型的所有提示词按照order_number顺序拼接；
+
+更新角色介绍。
+
+后端实现函数：add_system_prompt，需要添加角色性格，所以传入friend
+
+将回复系统提示词、角色性格、长期记忆拼接成SystemMessage(prompt)，添加到inputs中；
+
+将最近的10轮对话，按照HumanMessage、AIMessage格式添加到系统提示词和用户消息中间；
+
+pprint()在输出字典的时候会自动缩进；
+
+## 添加function call
+
+大模型不是万能的，
+
+给大模型传工具函数，由其自己决定是否要调用这些函数。
+
+给大模型传递一个工具列表（函数列表），会告诉大模型每个函数是干嘛的，输入、输出是什么，大模型每次决定要不要调用工具、调用工具中的哪些，我们在收到大模型的回复之后看一下是否要调用工具，如果需要就调用有关工具，然后将工具的执行结果包装成一个ToolMessage再发给大模型、重新调用一次大模型
+
+计算流程图
+
+**condition条件边**会判断最后一个AI回复中是不是要调用tool，如果是的话就会走到相应的**工具节点ToolNode**，然后工具节点将工具的执行结果包装成一个工具信息添加到messages的最后，执行完工具后会再回到大模型，把messages发给大模型，大模型会再回复我们一个AI信息，condition条件边会再判断AI信息里要不要调用tool，...，就变成了一个循环，只要需要调用工具就会一直调用工具，直到不需要调用工具为止；
 
 
 
 
-流程图是什么？
-
-什么叫function call？
 
 <img src="D:\Courses\学习笔记\带工具调用的流程图.png" style="zoom:70%;" />
+
+### 把工具节点添加到流程图
+
+定义获取时间的工具函数，添加函数文档
+
+`@tool` 让 AI 知道有一个获取精确时间的工具可用，当用户询问时间相关问题时，AI 会自动调用这个函数来获取真实时间，而不是自己猜测。
+
+将定义好的工具（get_time）添加到工具列表里，`tools = [get_time, search_knowledge_base]`
+
+将工具列表绑定到大模型上，
+
+```python
+tools = [get_time, search_knowledge_base]
+llm = ChatOpenAI(xxx).bind_tools(tools)
+```
+
+定义工具节点：ToolNode()，lang_graph自己实现的，会根据AI的信息调用对应的函数；
+
+tool_calls是lang_graph自己定义的，如果有工具需要调用就会将其放到这个tool_calls对象上；
+
+LangGraph 将智能体工作流建模为一张“图”。这张图有三个关键组成部分：
+
+- **节点 (Nodes)**：代表具体的工作单元，比如“调用大模型”、“执行一个工具”或“发送一封邮件”。
+- **边 (Edges)**：定义节点之间的连接，决定了工作流的执行路径。
+- **状态 (State)**：一个在所有节点间共享的数据结构，用于传递和存储信息。
+
+![](D:\Courses\学习笔记\现在几点了演示.png)
+
+<img src="D:\Courses\学习笔记\现在几点了前端效果.png" style="zoom:50%;" />
+
+第一次：把系统提示词+用户消息发送给llm，llm返回tool_calls中值为get_time，
+
+于是，进入工具节点tool_node：ToolNode，工具节点将执行结果ToolMessage添加到状态中；
+
+第二次：把State再次传递给llm，llm组织好数据后，返回给前端；
+
+什么叫function call？
 
 class Message保存每一轮对话的内容。
 
 <img src="D:\Courses\学习笔记\长期记忆agent流程图.png" style="zoom:80%;" />
 
+## 添加长期记忆
+
+将总结长期记忆的系统提示词保存到到SystemPrompt，title="记忆"；
+
+长期记忆保存在好友关系（Friend.Memory）中；
+
+创建新的软件包memory，即新的流程图
+
+backend/web/views/friend/message/memory/graph.py 长期记忆的计算流程图
+
+backend/web/views/friend/message/memory/update.py 调用长期记忆的计算流程图
+
+长期记忆模块不需要返回给用户，因此不需要采用流式，
+
+让大模型总结长期记忆时，也需要一个总结的系统提示词，然后再加上原始记忆、最近对话，一起发给llm。
+
+每次在MessageChatView中创建完消息后，调用更新记忆模块；
+
+同时注意，在组织**聊天**的系统提示词时，需要加上这个长期记忆
+
+```python
+# backend/web/views/friend/message/chat/chat.py
+# 添加系统提示词
+def add_system_prompt(state, friend):
+    prompt += f'【长期记忆】\n{friend.memory}\n'
+```
+
+
+
+ **LangGraph 的节点定义非常灵活**，只要是一个**可调用对象（callable）**，都可以作为节点。
+
+`add_node()` 接受任何**可调用对象**，包括：
+
+- 普通函数（如 `model_call`）
+- 类实例（如果实现了 `__call__` 方法）
+- 任何实现了 `__call__` 的对象（如 `ToolNode` 实例）
+
 长期记忆和短期记忆什么区别？
+
+短期记忆就是最近10轮对话；长期记忆是记忆模块计算流程图总结得到的；
 
 每次在组织传给llm的消息`inputs`时，采用系统提示词（SystemPrompt）+角色性格（friend.character.profile）+长期记忆（friend.memory）+最近十轮对话（Message）+用户消息（request.data['message']）的格式
 
 langchain_openai这个python软件包是在什么章节install的？
 
-长期记忆模块不需要返回给用户，因此不需要采用流式，
-
-长期基于保存在系统提示词（SystemPrompt）中，title='记忆'
+总结：所谓长期记忆就是新建一个流程图，让大模型按照指定的规则总结最近的消息。
 
 ## 知识库
 
@@ -617,6 +800,8 @@ langchain_openai这个python软件包是在什么章节install的？
 
 向量数据库可以很方便地去存这些向量，然后很方便地去查找距离某个向量最近的向量，
 
+向量的夹角可以反应语义的相关性，
+
 
 
 安装pip install ipython便于交互，安装速度很慢，可以换源。
@@ -624,6 +809,61 @@ langchain_openai这个python软件包是在什么章节install的？
 ```shell
 pip install ipython
 ```
+
+### 创建、查询向量数据库
+
+本地LanceDB数据库调用阿里云text-embedding-v4模型将文本转换为 1024 维向量；
+
+embed_documents、embed_query为重载基类Embeddings的函数；
+
+创建
+
+```
+原始文档 (data.txt)
+      ↓
+[1. 加载文档]
+      ↓
+Document 对象
+      ↓
+[2. 文本切分] chunk_size=500, overlap=50
+      ↓
+文本片段列表 (chunks)
+      ↓
+[3. 向量化] 调用阿里云 API
+      ↓
+向量列表 (每个 chunk → 1024维向量)
+      ↓
+[4. 存储到 LanceDB]
+      ↓
+向量数据库表 (本地文件)
+```
+
+查询
+
+```
+用户问题: "什么是深度学习？"
+      ↓
+[1. 查询向量化] 调用阿里云 API
+      ↓
+查询向量 (1024维)
+      ↓
+[2. 相似度计算] LanceDB 本地执行
+   (余弦相似度/欧几里得距离)
+      ↓
+[3. 找出最相似的 k 个向量]
+      ↓
+[4. 返回对应的原始文本]
+      ↓
+最相似的文档片段列表
+```
+
+**创建向量数据库** = 调用 API 将文档转为向量后存入本地；
+**查询向量数据库** = 调用 API 将问题转为向量后在本地找最相似的文档。
+两次都需要调用 Embedding API，因为向量数据库只懂向量，不懂文本。
+
+### 添加新的工具节点
+
+实现search_knowledge_base，并将其添加到工具列表：tools = [get_time, search_knowledge_base]
 
 
 
@@ -644,6 +884,8 @@ pip install ipython
 <img src="D:\Courses\学习笔记\前端显示调用tool的返回结果.png" style="zoom:60%;" />
 
 <img src="D:\Courses\学习笔记\使用tool2次调用ai流程图.png" style="zoom:60%;" />
+
+
 
 # 6. 语音模块
 
