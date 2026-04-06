@@ -87,22 +87,22 @@ class MessageChatView(APIView):
     # ws: 建立与阿里云 DashScope 的实时推理接口
     # task_id:
     async def tts_sender(self, app, inputs, mq, ws, task_id):
-        """利用文本大模型生成要回复的文字，并将其传给语音大模型"""
+        """向语音合成模型发送文本"""
         async for msg, metadata in app.astream(inputs, stream_mode="messages"):
             if isinstance(msg, BaseMessageChunk):
                 if msg.content:
                     # 发给语音合成大模型
                     await ws.send(json.dumps({
                         "header": {
-                                      "action": "continue-task",
-                                      "task_id": task_id, # 随机uuid
-                        "streaming": "duplex"
-                    },
+                            "action": "continue-task",
+                            "task_id": task_id, # 随机uuid
+                            "streaming": "duplex"
+                        },
                         "payload": {
-                        "input": {
-                            "text": msg.content,
+                            "input": {
+                                "text": msg.content,
+                            }
                         }
-                    }
                     }))
                     # 放到消息队列中
                     mq.put_nowait({'content': msg.content})
@@ -116,11 +116,16 @@ class MessageChatView(APIView):
             },
             "payload": {
                 "input": {} # input不能省去，否则会报错
-        }
+            }
         }))
 
     async def tts_receiver(self, mq, ws):
+        """从语音合成模型接受音频"""
         # 每次迭代都 await 下一条消息
+        # 对于同一个WebSocket连接，接收到的消息顺序与发送顺序严格一致。
+        # 这是由WebSocket底层的TCP协议保证的
+        # 取数据（接收）：异步的，等待时让出控制权，不阻塞事件循环
+        # 处理数据（循环体）：顺序执行的，一次处理一条，处理完才能取下一条
         async for msg in ws:
             # 如果返回的是字节数据
             if isinstance(msg, bytes):
@@ -176,12 +181,13 @@ class MessageChatView(APIView):
 
     def work(self, app, inputs, mq, voice_id):
         try:
+            # 启动事件循环
             asyncio.run(self.run_tts_tasks(app, inputs, mq, voice_id))
         finally:
             mq.put_nowait(None)
 
     def event_stream(self, app, inputs, friend, message):
-        mq = Queue()
+        mq = Queue() # 线程安全的消息队列
         # 创建副线程
         thread = threading.Thread(target=self.work, args=(app, inputs, mq, friend.character.voice.voice_id))
         thread.start()
@@ -189,12 +195,14 @@ class MessageChatView(APIView):
         full_output = '' # 大模型的回复
         full_usage = {}  # 消耗量
         while True:
-            msg = mq.get()
+            msg = mq.get() # 没有消息会阻塞
             if not msg:
                 break
+            # 文本
             if msg.get('content', None):
                 full_output += msg['content']
                 yield f'data: {json.dumps({'content': msg['content']}, ensure_ascii=False)}\n\n'
+            # 音频
             if msg.get('audio', None):
                 yield f'data: {json.dumps({'audio': msg['audio']}, ensure_ascii=False)}\n\n'
             # token的消耗量

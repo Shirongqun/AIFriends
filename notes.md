@@ -865,6 +865,8 @@ Document 对象
 
 实现search_knowledge_base，并将其添加到工具列表：tools = [get_time, search_knowledge_base]
 
+所谓的检索增减生成也是一个tool函数，由lang_graph识别到然后去调用。
+
 
 
 流程举例演示如下：
@@ -891,6 +893,16 @@ Document 对象
 
 上传一段语音，可以把语音复刻出来。模仿人说话。
 
+automatic speech recognition (ASR) 语音识别；
+
+Text-to-Speech (TTS) 语音合成；
+
+文本生成大模型：文字**非流式**输入、文字流式输出；使用sse
+
+语音识别大模型：语音流式输入、文字流式输出；websocket
+
+语音合成大模型：文字流式输入，语音流式输出；websocket
+
 <img src="D:\Courses\学习笔记\语音模块架构图.png" style="zoom:80%;" />
 
 2个简化
@@ -899,13 +911,38 @@ Document 对象
 
 client给server发消息由流式改为非流式后，可以不用在django中实现websocket，
 
-2）把后端语音识别的结果发给前端，前端再重新调用一遍
+2）把后端语音识别的结果先发给前端，前端再重新调用一遍后端
 
-这样，前端、后端只需实现一套逻辑即可
+这样，语音回复、文字回复都可以复用语音识别后这段代码逻辑了。前端语音也是调用handleSend函数
 
-网络请求的时间远远小于大模型生成结果的时间，所以加这一段（2个网络延迟）区别不是很明显。
+由于网络请求的时间远远小于大模型生成结果的时间，所以加这一段（2个网络延迟）区别不是很明显。
 
+## 语音识别
 
+### 前端浏览器实现语音输入
+
+**实现当我们说话时，打断ai的回复**
+增加processId标识对话的版本号，比如在第7轮对话，全局变量processId=7，回复了一半时，我又输入一段文字，开启了第8轮对话，此时processId=8，但是第7轮对话里curId的仍为7，在onmessage中，curId !== processId就直接退出了，不会再向下执行了。
+
+只要更新版本号processId，就不再接受新消息了。
+
+InputField.vue包括文本输入模块（<form />）和语音输入模块（<Microphone />）
+
+引用语音监测模块，AI实现
+
+<Microphone />组件挂载时即调用startRecording()，当监测到说话时调用onSpeechStart上的匿名函数；当监测到说话结束了，就会调用onSpeechEnd上的匿名函数：把数据发送给后端（sendToBackend）调用语音识别接口。
+
+将pcm格式的语音发送给后端/api/friend/message/asr/asr/；
+
+语音识别成功返回后调用handleSend将文字再发送给后端；因此需要将handleSend以事件的形式传给子组件；
+
+### 实现后端语音识别
+
+语音相关的大模型一般都是用websocket来调用，后端安装websocket包：`pip install websockets`
+
+语音识别、语音合成的url都是`WSS_URL`
+
+后端实现ASRView
 
 websocket协议可以传字节，也可以传文本；sse只能传文本；
 
@@ -913,7 +950,9 @@ websocket协议可以传字节，也可以传文本；sse只能传文本；
 
 <img src="D:\Courses\学习笔记\后端与大模型语音识别交互逻辑.png" style="zoom:80%;" />
 
-可以发现，在与大模型语音识别的交互过程中，一个线程是无法实现发送消息的同时接收消息，在python使用协程实现即可
+可以发现，在与大模型语音识别的交互过程中，一个线程是无法实现发送消息的同时接收消息，在python使用协程实现即可，一个协程负责发送，另一个协程负责接受。
+
+后端大部分时间都是在等待网络请求上，比如给大模型发送完消息后，大模型产生消息其实是比较慢的，大模型给我们回复消息就是IO，协程就是一旦我们遇到IO语句的时候就会把当前任务挂起，然后去执行其他的请求，其实是在一个线程里，
 
 语音识别：ASR
 
@@ -927,11 +966,11 @@ websocket协议可以传字节，也可以传文本；sse只能传文本；
 
 阿里云建议每次发送100ms的音频，我们采用的是pcm16音频格式，用16位（2字节）来表示一次采样，采样频率是16000hz，1s16000次，所以1s是采样16000✖️2=32000字节，那么100ms就是3200字节。
 
-
+asr_receiver时，只有语音识别结果有值且`output['transcription']['sentence_end']`为true时才使用这个文本，其实比如微信翻译，会传过来很多识别结果而且后边的会修改前边的识别结果，我们只需要使用最终的翻译结果（'sentence_end'）即可。
 
 异步生成的结果不能同步给生成器，
 
-
+添加后端url: 'api/friend/message/asr/asr/'
 
 协程的核心机制：事件循环
 
@@ -939,14 +978,16 @@ websocket协议可以传字节，也可以传文本；sse只能传文本；
 import asyncio
 import time
 
+# 定义协程函数
 async def task(name, duration):
     print(f"{name} 开始: {time.strftime('%X')}")
     await asyncio.sleep(duration)  # 模拟I/O
     print(f"{name} 结束: {time.strftime('%X')}")
     return name
 
+# 执行
 async def main():
-    # 事件循环开始工作
+    # 事件循环开始工作，并发执行多个协程
     tasks = [
         task("A", 2),
         task("B", 1),
@@ -957,7 +998,21 @@ async def main():
     results = await asyncio.gather(*tasks)
     
 asyncio.run(main())
+
+# 执行结果如下
+A 开始: 22:59:52
+B 开始: 22:59:52
+C 开始: 22:59:52
+B 结束: 22:59:53
+A 结束: 22:59:54
+C 结束: 22:59:55
 ```
+
+## 语音合成
+
+发送的文本，返回的是二进制音频；
+
+
 
 
 
@@ -970,9 +1025,27 @@ asyncio.run(main())
 - **`async def`**：声明这个函数可以"异步执行"
 - **`async for`**：声明这个循环的每次迭代都可能"等待数据"
 
-
-
 使用 **`async` + `await`** 声明函数为异步，表明该函数内**遇到 `await` 阻塞**时可以将该函数挂起，转而执行函数外其他的代码
+
+明确一下，当前端通过语音聊天时，语音读取完后是自动调用api/friend/message/asr/asr/语音识别api的，然后返回给前端后紧接着调用前端handelSend函数，再次调用api/friend/message/chat/进行聊天的，所以后端chat.py中仅涉及与文本大模型、语音合成大模型（cosyvoice-v3-flash）交互，并不会与语音识别大模型（gummy-realtime-v1）交互！！！
+
+先与语音合成大模型建立websocket连接，然后使用2个协程同步发送文本、接收音频；
+
+后端**动态判断并分发不同类型的数据**；**前端如何响应**：前端 JavaScript 代码会持续监听这个 SSE 流。每当收到一个 `data:` 行，它就会解析 JSON，然后检查其中是包含 `content` 字段还是 `audio` 字段，从而决定是渲染文字，还是播放音频。这种设计使前端可以根据数据类型做出不同的响应。
+
+将音频使用base64编码成文本，因为SSE是基于文本，不认识二进制协议；
+
+消息队列中既有文本也要音频，都发给前端，由前端识别处理。
+
+对于同一个 WebSocket 连接，接收到的消息顺序与发送顺序**严格一致**。这是由 WebSocket 底层的 TCP 协议保证的
+
+`async for` 是**严格的顺序迭代器**，必须等当前消息处理完（或遇到 `break`/`return`）才能处理下一个消息。消息的处理顺序就是它们的到达顺序。
+
+`async for` 实现了"异步接收，同步处理"的模式——接收时可以等待（不阻塞），但处理时必须按顺序一个一个来。
+
+前端播放音频，每次得到音频调用handleAudioChunk函数
+
+音频缓冲区sourceBuffer在初始化的时候绑定了一个监听器mediaSource.addEventListener
 
 
 

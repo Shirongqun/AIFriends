@@ -28,7 +28,7 @@ class ASRView(APIView):
             'result': 'success',
             'text': text,
         })
-
+    # 语音识别发送数据
     async def asr_send(self, pcm_data, ws, task_id):
         chunk = 3200
         for i in range(0, len(pcm_data), chunk):
@@ -44,7 +44,7 @@ class ASRView(APIView):
                 "input": {}
             }
         }))
-
+    # 语音识别接受数据
     async def asr_receiver(self, ws):
         text = ''
         async for msg in ws:
@@ -98,4 +98,5 @@ class ASRView(APIView):
                 self.asr_send(pcm_data, ws, task_id),
                 self.asr_receiver(ws)
             )
+            # 等待以上协程全部执行完毕，再返回文本
             return text

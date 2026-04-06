@@ -11,7 +11,7 @@ const emit = defineEmits(['pushBackMessage', 'addToLastMessage'])
 const inputRef = useTemplateRef('input-ref')
 const message = ref('')
 let processId = 0  // 全局变量，可用于标识当前聊天窗口中新加入对话的版本号
-const showMic = ref(false)
+const showMic = ref(false) // 是否显示语音输入模块
 
 let mediaSource = null;
 let sourceBuffer = null;
@@ -104,11 +104,12 @@ function focus() {
 }
 
 // 1、绑定到表单、发送按钮，提交表单或者点击发送按钮后被调用
-// 2、绑定到了Microphone.vue，子组件里调用后端语音合成成功之后也会被调用
+// 2、绑定到了Microphone.vue，子组件里成功调用后端语音识别得到文本后也会调用该函数
+// 3、event是默认传入的参数，不能省略
 async function handleSend(event, audio_msg) {
   // 取出内容
   let content
-  if (audio_msg) {
+  if (audio_msg) { // 语音识别后的文字
     content = audio_msg.trim()
   } else {
     content = message.value.trim()
@@ -118,7 +119,7 @@ async function handleSend(event, audio_msg) {
   // 初始化音频播放器
   initAudioStream()
 
-  const curId = ++ processId
+  const curId = ++ processId // 先+1，再赋值给curId
   message.value = ''
 
   emit('pushBackMessage', {role: 'user', content: content, id: crypto.randomUUID()})
@@ -149,14 +150,14 @@ async function handleSend(event, audio_msg) {
   }
 }
 
-//
+// 关闭输入模块组件
 function close() {
   ++ processId  // 所有旧的对话都不再接受消息了
   showMic.value = false
   stopAudio()
 }
 
-// 打断对方说话
+// 打断虚拟角色说话
 function handleStop() {
   ++ processId
   stopAudio()
@@ -170,7 +171,9 @@ defineExpose({
 </script>
 
 <template>
+<!--  文本输入模块-->
   <form v-if="!showMic" @submit.prevent="handleSend" class="absolute bottom-4 left-2 h-12 w-86 flex items-center">
+<!--    文本输入框-->
     <input
       ref="input-ref"
       v-model="message"
@@ -178,15 +181,16 @@ defineExpose({
       type="text"
       placeholder="文本输入..."
     >
+<!--    小麦克风-->
+    <div @click="showMic = true" class="absolute right-10 w-8 h-8 flex justify-center items-center cursor-pointer">
+      <MicIcon />
+    </div>
 <!--    发送-->
     <div @click="handleSend" class="absolute right-2 w-8 h-8 flex justify-center items-center cursor-pointer">
       <SendIcon />
     </div>
-    <div @click="showMic = true" class="absolute right-10 w-8 h-8 flex justify-center items-center cursor-pointer">
-      <MicIcon />
-    </div>
   </form>
-<!--  麦克风组件-->
+<!--  语音输入模块-->
   <Microphone
       v-else
       @close="showMic = false"

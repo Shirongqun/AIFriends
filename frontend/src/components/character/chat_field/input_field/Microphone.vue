@@ -6,7 +6,7 @@ import api from "@/js/http/api.js";
 import CONFIG_API from "@/js/config/config.js";
 
 const emit = defineEmits(['close', 'send', 'stop'])
-const isSpeaking = ref(false)
+const isSpeaking = ref(false) // 是否正在说话
 
 let vadInstance = null;
 
@@ -88,10 +88,11 @@ onBeforeUnmount(() => {
         :style="{ animationDelay: `${i * 0.1}s` }"
       ></div>
     </div>
-<!--    默认语音输入-->
+<!--    语音输入文字提示-->
     <div v-else class="text-white/50 text-base w-full text-center">
       语音输入
     </div>
+<!--    键盘-->
     <div @click="emit('close')" class="absolute right-2 w-8 h-8 flex justify-center items-center cursor-pointer">
       <KeyboardIcon />
     </div>

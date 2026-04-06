@@ -26,7 +26,7 @@ const user = useUserStore()
         </div>
       </div>
 <!--      用户聊天泡泡-->
-      <div class="chat-bubble chat-bubble-success whitespace-pre-wrap">{{ message.content }}</div>
+      <div class="chat-bubble chat-bubble-success whitespace-pre-wrap break-all">{{ message.content }}</div>
     </div>
   </div>
 </template>
