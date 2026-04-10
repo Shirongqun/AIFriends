@@ -14,7 +14,7 @@ class UpdateCharacterView(APIView):
             character_id = request.data['character_id']
             character = Character.objects.get(id=character_id, author__user=self.request.user)
             name = request.data['name'].strip()
-            voice_id = request.data['voice_id']
+            voice_id = request.data['voice_id'] # 数据库自定义的id
             profile = request.data['profile'].strip()[:100000]
             photo = request.FILES.get('photo', None)
             background_image = request.FILES.get('background_image', None)

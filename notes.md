@@ -1057,7 +1057,9 @@ C 结束: 22:59:55
 
 模态框自动绑定了按esc键关闭。
 
-公网ip：8.130.157.21
+## 1）租云服务器
+
+租阿里云服务器，公网ip：8.130.157.21
 
 登录
 
@@ -1112,46 +1114,122 @@ tmux
 
 
 
-安装Python3.14
+**源码安装Python3.14解释器**：是指从 Python 官网下载 **源代码**，然后在你的操作系统上用编译器手动构建出 Python 解释器（`python` 命令）的过程。
 
+```shell
+# 将下载好的python软件包上传到服务器
+scp .\Python-3.14.3.tar.xz llm:
+# 解压
+tar -xvf Python-3.14.3.tar.xz
 ```
+
+源码安装，**Python 的标准实现（CPython）是用 C 语言编写的**
+
+```shell
 # 统计耗时
 time ./configure --enable-optimizations
 sudo make altinstall # 不会覆盖系统路径下原有的，而是创建一个指定版本的
 ```
 
+**在云端重新安装本地Python环境**
 
+把本地的python包在云端重新安装一遍
+
+在本地导出python安装过的所有包及其版本号：
+
+```shell
+# 在AIFriends目录下执行：
+pip freeze > requirements.txt
+```
+
+然后将`requirements.txt`上传到云服务器上。把这个文件中所有的包都安装一遍。
+
+然后在云服务上执行：`pip3.14 install -r requirements.txt --user`。安装到用户目录
+
+
+
+
+
+## 2）将本地项目部署到云端
+
+### 本地修改
 
 将前端网站的vue图标logo修改为自己的图片：修改frontend/public/favicon.ico为自己的图片
 
-**把IP地址关联一个域名**
+**把公网IP地址关联一个域名**
 
+```python
+# backend/backend/settings.py
+# 告诉 Django：只接受来自本机 (127.0.0.1) 和你线上域名 (app1565.acapp.acwing.com.cn) 的请求，其他来源的请求都会被安全地拒绝。
+ALLOWED_HOSTS = ['127.0.0.1', 'app1565.acapp.acwing.com.cn']
+```
 
+- **静态文件**：属于代码的一部分，由开发者提供（如 `style.css`、`logo.png`）
+- **媒体文件**：属于用户数据，由用户上传（如头像、帖子图片）
 
-访问域名是怎么访问到具体端口号的呢？
+配置前端：frontend/src/js/config/config.js
+
+访问域名是怎么访问到具体端口号的呢？https就是443端口，hppt就是80端口；
+
+在服务器上配置一个 **Nginx** 或 **Apache**，让它“守卫”在 80/443 端口，并设置规则：**“凡是访问域名 app1565.acapp.acwing.com.cn 的请求，都转发给本地 8000 端口上的 Django 程序处理。”**
 
 
 打包完前端后，前端的所有的包就都放到backend/static/frontend/assets/index-BI_WbIZS.js了，所以不需要在云服务器上安装vue环境。
 
-但是在本地安装的所有的python的包都需要在云端重新安装一遍，而且要确保每一个包的版本号是一致的。
-
-在本地导出python安装过的所有包及其版本号：
-
-在AIFriends目录下执行：
-
-```
-pip freeze > requirements.txt
-```
-
-然后将requirements.txt上传到云服务器上。
-
-然后在云服务上执行：pip3.14 install -r requirements.txt --user。
-
 记得重置数据库密码
+
+假如在 Django 中忘记管理员密码，最直接和安全的方法是通过命令行来修改
+
+```bash
+python manage.py shell
+```
+
+```
+# 1. 导入 User 模型
+from django.contrib.auth.models import User
+
+# 2. 查找你的用户对象（根据用户名）
+user = User.objects.get(username='your_username')
+
+# 3. 检查用户是否找到（可选）
+print(user.username, user.email)
+
+# 4. 设置新密码（Django 会自动处理加密）
+user.set_password('your_new_strong_password')
+
+# 5. 保存到数据库
+user.save()
+
+# 6. 退出 Shell
+exit()
+```
+
+### 上传项目到云端
+
+在AIFriends目录下上传后端代码：
+
+`scp -r backend llm:`比如数据库、知识库、静态文件都要从本地上传到云端。
 
 我的域名：https://app1565.acapp.acwing.com.cn
 
+```bash
+django-admin --version
+6.0.1
+python3.14 --version
+Python 3.14.3
+
+# 修改backend/settings.py文件：
+DEBUG = False
+
+# 收集静态文件：
+python3.14 manage.py collectstatic
+```
+
+**部署项目**
+
 让项目运行起来
+
+### 配置gunicorn
 
 运行`gunicorn`，在`/home/acs/backend/`目录下执行：
 
@@ -1161,33 +1239,162 @@ gunicorn --workers 3 --graceful-timeout 3 --bind unix:/home/acs/backend/gunicorn
 
 nginx已经运行，这时就可以访问域名了。
 
-### 语音复刻
+### 配置nginx
 
-定义Voice数据库，
+安装nginx：
+
+```shell
+sudo apt update
+sudo apt install nginx
+# 列出 nginx 包安装的所有文件
+dpkg -L nginx
+# 查看 nginx 命令位置
+which nginx
+# 或使用 whereis
+whereis nginx
+# 查看 nginx 包的详细信息
+apt show nginx
+# 如果想知道卸载时会删除哪些文件
+sudo apt remove nginx --dry-run
+# 彻底删除（包括配置文件）
+sudo apt purge nginx
+# 删除依赖和配置文件
+sudo apt autoremove --purge nginx
+```
+
+**配置nginx反向代理**
+
+将https证书复制到自己的服务器上，每年11月份左右要手动更新：
+
+/etc/nginx/cert/acapp.key
+/etc/nginx/cert/acapp.pem
+
+/etc/nginx/nginx.conf会用到上述2文件。
+
+配置/etc/nginx/nginx.conf：
+
+```
+xxx
+http {
+    server {
+        listen 443 ssl;
+        server_name app1565.acapp.acwing.com.cn;  # 替换成自己的域名
+
+        ssl_certificate     /etc/nginx/cert/acapp.pem;
+        ssl_certificate_key /etc/nginx/cert/acapp.key;
+    }
+}
+```
+
+这是一个符合生产环境标准的 Nginx 配置，它安全、高效地将 HTTP 流量升级为 HTTPS，并分工明确地处理了静态文件和 Django 动态请求。
+
+所有 HTTPS 请求确实都发往 443 端口，Nginx 根据请求头中的 `Host` 字段（即域名）来区分它们，然后转发给不同的后端服务。这就是你可以在同一台服务器上运行多个网站的核心原理。
+
+当业务大到需要多台 Nginx 时，引入 F5/LVS 来监听 443，然后把流量分发给多台 Nginx，如下：
+
+```
+用户 → [443] → LVS 负载均衡器 (1台)
+                    ↓
+        ┌───────────┼───────────┐
+        ↓           ↓           ↓
+    Nginx 1     Nginx 2     Nginx 3
+    (内部端口)   (内部端口)   (内部端口)
+        ↓           ↓           ↓
+      Django      Django      Django
+```
+
+加载nginx配置：
+
+`sudo nginx -s reload`
+
+## 3）语音复刻
+
+定义class Voice数据库，存所有的音色列表；主要就是维护一个voice_id属性；
+
+音色列表：https://help.aliyun.com/zh/model-studio/cosyvoice-voice-list?spm=a2c4g.11186623.0.0.3e867741hUe7K7
 
 在前端的await中，当执行到 await 时，程序并不会“卡死”等待，而是会“让出控制权”，让浏览器继续处理其他任务，等网络请求完成后再回来继续执行。
 
+所谓让角色按照某个音色讲话，就是在语音合成的时候传递一个**voice_id**，语音合成模型利用这个voice_id生成带音色的音频。
+
+在前端使用的是自定义当的id，在对接大模型时使用的是voice_id。
+
+前端更新角色信息、创建角色信息时都要传voice.id，后端使用这个id从数据库表Voice中查询
+
+Friend有character成员，在过滤的时候可以直接使用character_id
+
+```
+Friend.objects.filter(character_id=character_id, me=user_profile)
+```
+
+这种方式过滤
+
+这个cosyvoice-v3-flash是语音合成大模型。
+
+语音复刻的url：`VOICE_URL="https://dashscope.aliyuncs.com/api/v1/services/audio/tts/customization"`
 
 
-这个cosyvoice-v3-flash是什么东西？
 
+**语音复刻**
 
+```shell
+In [2]: from web.views.create.character.voice.custom.create_voice import create_voice
+vs = [1, 2, 4, 6, 7, 8]
+for v in vs:
+	print(create_voice(f'https://app1565.acapp.acwing.com.cn/media/tmp/{v}.mp3', v))
 
-把项目上传到云端
+```
 
-修改config.js为cloud
+**复刻自己的声音**
 
-然后打包 
+录音，然后上传到服务器，在本地调用create_voice()会生成一个voice_id，把这个voice_id保存到数据库表Voice中。
 
-删除云端backend，这会导致云端已有的数据被删除 rm -r backend/
+查看自己所有的voice，调用list_voice，底层也是向VOICE_URL发送一个请求，请求头中携带自己API_KEY、action动作。
 
-重新上传项目
+**把项目上传到云端**
 
-修改云端的settings.py中的DEBUG = False
+修改config.js为`cloud`
 
-python3.14 manage.py collectstatic:`collectstatic` 就像**把所有散落在各地的静态文件"打包"到一个文件夹**，方便 Nginx 一次性找到并高效提供访问。
+然后打包 `npm run build`
 
+删除云端backend，这会导致云端已有的数据被删除 `rm -r backend/`
 
+重新上传项目 `scp -r backend llm:`
+
+修改云端的settings.py中的 `DEBUG = False`
+
+收集静态文件
+
+```
+xx@xxx:~/backend$ python3.14 manage.py collectstatic
+```
+
+`collectstatic` 就像**把所有散落在各地的静态文件"打包"到一个文件夹**，方便 Nginx 一次性找到并高效提供访问。
+
+以后维护项目，尽量只把代码上传，数据库不要删除。
+
+启动gunicorn
+
+```
+xx@xxx:~/backend$ gunicorn --workers 3 --graceful-timeout 3 --bind unix:/home/acs/backend/gunicorn.sock backend.wsgi:application
+```
+
+统计代码量：
+
+```
+# 前端
+# src目录下统计js
+$ find ./ -name '*.js' | wc -l
+$ find ./ -name '*.js' | xargs cat | wc -l
+379
+# 统计vue
+$ find ./ -name '*.vue' | xargs cat | wc -l
+2491
+# 后端
+$ find ./ -name '*.py' | xargs cat | wc -l
+1700
+# 总共约4500行代码
+```
 
 
 

@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from web.models.character import Character, Voice
 
-
+# 打开更新个人信息页面时先路由到此
 class GetSingleCharacterView(APIView):
     permission_classes = [IsAuthenticated]
     def get(self, request):
